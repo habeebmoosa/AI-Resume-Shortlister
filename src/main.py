@@ -2,6 +2,8 @@ from fastapi import FastAPI, UploadFile, File
 import pandas as pd
 import os
 
+from src.process_user_info import process_excel_file
+
 UPLOAD_DIR = "uploads"
 
 app = FastAPI()
@@ -18,6 +20,12 @@ async def upload_excel(file: UploadFile = File(...)):
     with open(file_location, "wb") as f:
         f.write(file.file.read())
 
-    df = pd.read_excel(file_location)
+    df = process_excel_file(file.filename)
 
     return {"message": "File uploaded successfully", "filename": file.filename, "data": df.head().to_dict()}
+
+@app.get("/read")
+async def read_excel(filename = "resumes.xlsx"):
+    df = process_excel_file(filename)
+    # return {"message": "File uploaded successfully", "filename": filename, "data": df.head().to_dict()}
+    return df
