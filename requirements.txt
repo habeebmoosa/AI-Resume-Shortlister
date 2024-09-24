@@ -4,3 +4,6 @@ langchain-core
 langchain-google-genai
 fastapi
 pandas
+mysql-connector-python
+python-dotenv
+pypdf

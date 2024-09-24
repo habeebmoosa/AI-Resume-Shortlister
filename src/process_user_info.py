@@ -4,13 +4,16 @@ import requests
 from io import BytesIO
 from pypdf import PdfReader
 
-UPLOAD_DIR = "uploads"
+from src.utils.constants import UPLOAD_DIR
 
-def extract_resume_details(resume_urls: list[str]):
-    resume_texts = []
+def extract_resume_details(df):
+    resume_texts = {}
 
-    for url in resume_urls:
-        file_id = extract_file_id_of_google_drive_pdf(url)
+    for index, row in df.iterrows():
+        email = row.get('Email')
+        resume_url = row.get('Google Drive Resume URL')
+        
+        file_id = extract_file_id_of_google_drive_pdf(resume_url)
 
         if file_id:
             download_url = f'https://drive.google.com/uc?export=download&id={file_id}'
@@ -29,13 +32,13 @@ def extract_resume_details(resume_urls: list[str]):
                         page = reader.pages[page_num]
                         text += page.extract_text()
 
-                    resume_texts.append(text)
+                    resume_texts[email] = text
                 else:
-                    resume_texts.append(f"Failed to download resume from {url}")
+                    continue
             except Exception as e:
-                resume_texts.append(f"Error processing resume from {url}: {str(e)}")
+                continue
         else:
-            resume_texts.append(f"Invalid Google Drive URL: {url}")
+            continue
 
     return resume_texts
 
@@ -59,7 +62,8 @@ def process_excel_file(filename):
         }
     
     df = pd.read_excel(file_path)
-    resume_texts = extract_resume_details(df['Google Drive Resume URL'])
+    return df
+    # resume_texts = extract_resume_details(df)
 
-    return resume_texts
+    # return resume_texts
 
