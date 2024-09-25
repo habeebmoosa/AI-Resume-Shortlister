@@ -11,6 +11,8 @@ from email.mime.text import MIMEText
 from email.header import decode_header
 import email
 import imaplib
+import re
+from datetime import datetime
 
 from src.db.database import DatabaseSystem
 
@@ -91,23 +93,31 @@ def check_inbox():
 def read_and_schedule_interview(email_data):
     subject, sender_email, email_body = email_data
 
+    just_email = re.search(r'<([^>]+)>', sender_email).group(1)
+    print(just_email)
+
     prompt_template = ChatPromptTemplate.from_messages(
         [
-            ("system", "You are an email reader. You need to read the email and give the candidate's selected interview date only in a single line."),
+            ("system", "You are an email reader. You need to read the email and give the candidate's selected interview date only in this format and numbers only: Year, Month, Day"),
             ("human", "Email: {email_body}")
         ]
     )
 
     chain = prompt_template | llm | StrOutputParser()
     interview_date = chain.invoke({"email_body": email_body})
+
+    cleaned_date_str = interview_date.replace("-", "").strip()
+    date_obj = datetime.strptime(cleaned_date_str, "%Y, %m, %d")
+    formatted_date = date_obj.strftime("%Y-%m-%d")
+    print(formatted_date)
     
     conn = db.create_connection()
-    candidate_data = db.read_candidate(conn, sender_email, job_id=None)
+    candidate_data = db.read_candidate(conn, just_email)
 
     if candidate_data:
         id, name, email, _, _, job_id = candidate_data
 
-        db.store_interview_data(conn, id, name, email, job_id, interview_date)
+        db.store_interview_data(conn, id, name, email, job_id, formatted_date)
 
         print(f"Interview scheduled for {name} on {interview_date}")
     else:
@@ -115,10 +125,25 @@ def read_and_schedule_interview(email_data):
 
     db.close_connection(conn)
 
+    reply_email_with_meeting_link(name, email, job_id)
+
     return f"Interview scheduled on {interview_date}"
 
 def process_incoming_email():
     email_data = check_inbox()
     if email_data:
         return read_and_schedule_interview(email_data)
+    
+def reply_email_with_meeting_link(name, email, job_id):
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("system","You are a helpfull assistant that generates interview shedule meeting email with meeting link"),
+            ("human", "Generate only message of mail (no subject) for {name} for scheduling interview in the companay {company_name} for the job id {job_id}.The meeting link is {meeting_link}")
+        ]
+    )
 
+    chain = prompt_template | llm | StrOutputParser()
+
+    response = chain.invoke({"name": name, "company_name":"AgentProd Team", "job_id":job_id, "meeting_link":os.getenv("GOOGLE_MEET_LINK")})
+    send_email(email, "You go for next step. Interview is scheduled.", response)
+    return response

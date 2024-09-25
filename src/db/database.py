@@ -46,20 +46,20 @@ class DatabaseSystem:
             print("Connection is already closed")
 
 
-    def read_candidate(self, connection, email, job_id):
+    def read_candidate(self, connection, email):
         cursor = connection.cursor()
         query = """
-        SELECT * FROM shortlisted_candidates WHERE email = %s OR job_id = %s
+        SELECT * FROM shortlisted_candidates WHERE email = %s
         """
-        cursor.execute(query, (email, job_id))
+        cursor.execute(query, (email,))
         data = cursor.fetchone()
         connection.commit()
         return data
     
-    
+
     def store_interview_data(self, connection, id, name, email, job_id, interview_date):
         cursor = connection.cursor()
-        query = '''INSERT INTO interview_data (id, name, email, job_id, interview_date)
+        query = '''INSERT INTO interview_schedule (id, name, email, job_id, interview_date)
                    VALUES (%s, %s, %s, %s, %s)'''
         cursor.execute(query, (id, name, email, job_id, interview_date))
         connection.commit()
