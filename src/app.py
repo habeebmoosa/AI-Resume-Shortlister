@@ -1,19 +1,21 @@
 from fastapi import FastAPI, UploadFile, File
-import pandas as pd
 import os
 from pydantic import BaseModel
 import time
+import pandas as pd
 
 from src.utils.constants import UPLOAD_DIR
-from src.process_user_info import process_excel_file, extract_resume_details
-from src.ai_tools.resume_shortlist_model import shortlist_resumes
+from src.process_xl.process_user_info import ProcessResume
+from src.chains.resume_shortlist_model import ShortlistResume
 from src.db.database import DatabaseSystem
-from src.ai_tools.email_sender import email_sending_agent
-from src.ai_tools.email_sender import process_incoming_email
+from src.chains.email_sending_model import EmailChainSystem
 
 app = FastAPI()
 
+processResume = ProcessResume()
 db = DatabaseSystem()
+shortlistResume = ShortlistResume()
+emailChainSystem = EmailChainSystem()
 
 class JobData(BaseModel):
     job_description: str
@@ -44,9 +46,9 @@ async def upload_excel(file: UploadFile = File(...)):
 
 @app.post("/shortlist")
 async def read_excel(job_data: JobData):
-    df = process_excel_file(job_data.filename)
-    candidates_resume_data = extract_resume_details(df)
-    shortlisted_emails = shortlist_resumes(candidates_resume_data, 
+    df = processResume.process_excel_file(job_data.filename)
+    candidates_resume_data = processResume.extract_resume_details(df)
+    shortlisted_emails = shortlistResume.shortlist_resumes(candidates_resume_data, 
                                            job_data.job_description, 
                                            job_data.shortlist_count)
     
@@ -62,7 +64,7 @@ async def read_excel(job_data: JobData):
             db.insert_candidate(conn, name, email, resume, linkedin_profile, job_data.job_id)
             db.close_connection(conn)
 
-            email_sending_agent(name, email, job_data.job_id)
+            emailChainSystem.email_sending_agent(name, email, job_data.job_id)
 
     return shortlisted_emails
 
@@ -70,13 +72,12 @@ async def read_excel(job_data: JobData):
 @app.get("/readuser")
 async def read_user(input_user: InputUser):
     conn = db.create_connection()
-    data = db.read_candidate(conn, input_user.email, input_user.job_id)
+    data = db.read_candidate(conn, input_user.email)
     db.close_connection(conn)
     return data
-
 
 @app.get("/emailresponder")
 async def email_responder():
     while True:
-        process_incoming_email()
+        emailChainSystem.process_incoming_email()
         time.sleep(300)
