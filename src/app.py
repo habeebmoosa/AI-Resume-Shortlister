@@ -2,19 +2,28 @@ from fastapi import FastAPI, UploadFile, File
 import pandas as pd
 import os
 from pydantic import BaseModel
+import time
 
 from src.utils.constants import UPLOAD_DIR
 from src.process_user_info import process_excel_file, extract_resume_details
 from src.ai_tools.resume_shortlist_model import shortlist_resumes
-from src.db.database import create_connection, insert_candidate, close_connection
+from src.db.database import DatabaseSystem
+from src.ai_tools.email_sender import email_sending_agent
+from src.ai_tools.email_sender import process_incoming_email
 
 app = FastAPI()
+
+db = DatabaseSystem()
 
 class JobData(BaseModel):
     job_description: str
     shortlist_count: int
     job_id: int
     filename: str
+
+class InputUser(BaseModel):
+    email: str
+    job_id: int
 
 
 if not os.path.exists(UPLOAD_DIR):
@@ -49,8 +58,25 @@ async def read_excel(job_data: JobData):
             resume = row.get("Google Drive Resume URL")
             linkedin_profile = row.get("Linkedin Profile URL")
 
-            conn = create_connection()
-            insert_candidate(conn, name, email, resume, linkedin_profile, job_data.job_id)
-            close_connection(conn)
+            conn = db.create_connection()
+            db.insert_candidate(conn, name, email, resume, linkedin_profile, job_data.job_id)
+            db.close_connection(conn)
+
+            email_sending_agent(name, email, job_data.job_id)
 
     return shortlisted_emails
+
+
+@app.get("/readuser")
+async def read_user(input_user: InputUser):
+    conn = db.create_connection()
+    data = db.read_candidate(conn, input_user.email, input_user.job_id)
+    db.close_connection(conn)
+    return data
+
+
+@app.get("/emailresponder")
+async def email_responder():
+    while True:
+        process_incoming_email()
+        time.sleep(300)
