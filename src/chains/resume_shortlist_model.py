@@ -4,6 +4,8 @@ from langchain.prompts import PromptTemplate
 from langchain_google_genai import GoogleGenerativeAI
 import json
 import re
+import requests
+import os
 
 from src.utils.constants import REGEX_PARSE
 
@@ -11,37 +13,23 @@ load_dotenv()
 
 class ShortlistResume:
     def __init__(self):
-        pass
+        self.FLOWISE_RESUME_SHORTLIST = os.getenv("FLOWISE_RESUME_SHORTLIST")
 
     def shortlist_resumes(self, candidates_data, job_description, shortlist_count):
-        llm = GoogleGenerativeAI(model="gemini-1.5-flash")
-
-        shortlist_template = """
-        You are a hiring manager. You have received the resumes of some candidates as input. You want to shortlist {shortlist_count} candidates at max based on job description {job_description}.
-        Please go through their resumes and list only their email addresses (which is the key of the resume data) that should be shortlisted based on the requirements. Do not include any other information, just their emails in JSON format.
-        Input: {candidates}
-        """
-
-        prompt_template = PromptTemplate.from_template(shortlist_template)
-
-        chain = prompt_template | llm
-
-        result = chain.invoke(
-            {
-                "candidates":candidates_data,
-                "job_description":job_description,
+        promptValues = {
+                "job_description": job_description,
                 "shortlist_count": shortlist_count,
-                
-            }
-        )
+                "candidates": candidates_data
+        }
 
-        match = re.search(REGEX_PARSE, result)
+        payload = {
+        "question": promptValues
+        }
 
-        if match:
-            json_data = match.group(1)
-            shortlisted_emails = json.loads(json_data)
-            email_list = list(shortlisted_emails.keys())
-        else:
-            return {"message":"Model is not working or json is not parsing."}
-        
-        return email_list
+        response = requests.post(self.FLOWISE_RESUME_SHORTLIST, json=payload)
+        result = response.json()
+        print(result['text'])
+
+        # email_list = json.loads(result['text'])
+
+        return result['text']

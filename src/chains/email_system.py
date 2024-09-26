@@ -16,7 +16,7 @@ class EmailSystem:
         self.SENDER_EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
         self.SMTP_SERVER = os.getenv("SMTP_SERVER")
 
-    def send_email(self, email_id : str, subject: str, message: str) -> str:
+    async def send_email(self, email_id : str, subject: str, message: str) -> str:
 
         if not all([email_id, subject, message]):
             return "Missing one or more required fields: email, subject, message"
@@ -35,7 +35,7 @@ class EmailSystem:
 
         return "Email sent successfully!"
     
-    def check_inbox(self):
+    async def check_inbox(self):
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(self.SENDER_EMAIL_ID, self.SENDER_EMAIL_PASSWORD)
         mail.select("inbox")

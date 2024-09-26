@@ -11,7 +11,7 @@ class ProcessResume:
         pass
 
     def extract_resume_details(self, df):
-        resume_texts = {}
+        resume_list = []
 
         for index, row in df.iterrows():
             email = row.get('Email')
@@ -33,7 +33,7 @@ class ProcessResume:
                             page = reader.pages[page_num]
                             text += page.extract_text()
 
-                        resume_texts[email] = text
+                        resume_list.append({"email": email, "resume": text})
                     else:
                         continue
                 except Exception as e:
@@ -41,7 +41,7 @@ class ProcessResume:
             else:
                 continue
 
-        return resume_texts
+        return resume_list
 
 
     def extract_file_id_of_google_drive_pdf(self, url):
