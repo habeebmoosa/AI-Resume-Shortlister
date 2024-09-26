@@ -6,6 +6,9 @@ from langchain.prompts import ChatPromptTemplate
 import os
 import re
 from datetime import datetime
+import requests
+import httpx
+import asyncio
 
 from src.db.database import DatabaseSystem
 from src.chains.email_system import EmailSystem
@@ -18,77 +21,74 @@ load_dotenv()
 class EmailChainSystem:
     def __init__(self):
         self.llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+        self.FLOWISE_SEND_EMAIL = os.getenv("FLOWISE_SEND_EMAIL")
+        self.FLOWISE_EMAIL_RESPONDER = os.getenv("FLOWISE_EMAIL_RESPONDER")
 
     def email_sending_agent(self, name:str, email:str, job_id:int):
-        prompt_template = ChatPromptTemplate.from_messages(
-            [
-                ("system","You are a helpfull assistant that generates congratulation email for shortlisted candidate and ask for interview sheduel date."),
-                ("human", "Generate only message of mail (no subject) for {name} for shortlisting in the companay {company_name} for the job id {job_id}. Available dates for interview {dates}, and {timing}")
-            ]
-        )
-        
-        chain = prompt_template | self.llm | StrOutputParser()
+        promptValues = {
+        "name":name,
+        "company_name":"AgentProd Team",
+        "job_id":job_id,
+        "dates":"15 Oct 2024 to 18 Oct 2024"
+        }
 
-        response = chain.invoke({"name": name, "company_name":"AgentProd Team", "job_id":job_id, "dates":"15 Oct 2024 to 18 Oct 2024", "timing":"10 AM to 4PM"})
-        emailSystem.send_email(email, "Congrats for shortlisting. Take further actions.", response)
+        payload = {
+            "question": promptValues
+        }
+
+        response = requests.post(self.FLOWISE_SEND_EMAIL, json=payload)
+        result = response.json()
+
+        emailSystem.send_email(email, "Congrats for shortlisting. Take further actions.", result['text'])
         return response
 
 
-    def read_and_schedule_interview(self, email_data):
+    async def read_and_schedule_interview(self, email_data):
         subject, sender_email, email_body = email_data
 
         just_email = re.search(r'<([^>]+)>', sender_email).group(1)
         print(just_email)
 
-        prompt_template = ChatPromptTemplate.from_messages(
-            [
-                ("system", "You are an email reader. You need to read the email and give the candidate's selected interview date only in this format and numbers only: Year, Month, Day"),
-                ("human", "Email: {email_body}")
-            ]
-        )
-
-        chain = prompt_template | self.llm | StrOutputParser()
-        interview_date = chain.invoke({"email_body": email_body})
-
-        cleaned_date_str = interview_date.replace("-", "").strip()
-        date_obj = datetime.strptime(cleaned_date_str, "%Y, %m, %d")
-        formatted_date = date_obj.strftime("%Y-%m-%d")
-        print(formatted_date)
-        
         conn = db.create_connection()
-        candidate_data = db.read_candidate(conn, just_email)
+        candidate_data = db.read_candidate(conn, just_email)  # Ensure this is async
 
         if candidate_data:
             id, name, email, _, _, job_id = candidate_data
-
-            db.store_interview_data(conn, id, name, email, job_id, formatted_date)
-
-            print(f"Interview scheduled for {name} on {interview_date}")
-            self.reply_email_with_meeting_link(name, email, job_id)
+            print(f"Interview scheduled for {name}")
+            await self.reply_email_with_meeting_link(name, email, job_id, email_body)
         else:
             print("Candidate not found in the database.")
 
         db.close_connection(conn)
 
-        return f"Interview scheduled on {interview_date}"
+        return f"Interview scheduled confirmed for {name}"
     
 
-    def reply_email_with_meeting_link(self, name, email, job_id):
-        prompt_template = ChatPromptTemplate.from_messages(
-            [
-                ("system","You are a helpfull assistant that generates interview shedule meeting email with meeting link"),
-                ("human", "Generate only message of mail (no subject) for {name} for scheduling interview in the companay {company_name} for the job id {job_id}.The meeting link is {meeting_link}")
-            ]
-        )
+    async def reply_email_with_meeting_link(self, name, email, job_id, email_body):
+        input_data = {
+            "email": email_body,
+            "name": name,
+            "company_name": "AgentProd Team"
+        }
 
-        chain = prompt_template | self.llm | StrOutputParser()
+        payload = {"question": input_data}
 
-        response = chain.invoke({"name": name, "company_name":"AgentProd Team", "job_id":job_id, "meeting_link":os.getenv("GOOGLE_MEET_LINK")})
-        emailSystem.send_email(email, "You go for next step. Interview is scheduled.", response)
+        retries = 3
+        for attempt in range(retries):
+            try:
+                response = requests.post(self.FLOWISE_EMAIL_RESPONDER, json=payload, timeout=30.0)
+                result = response.json()
+                break
+            except httpx.ReadTimeout:
+                if attempt < retries - 1:
+                    await asyncio.sleep(2) 
+                else:
+                    raise
+        
+        await emailSystem.send_email(email, "You go for next step. Interview is scheduled.", result['text'])
         return response
 
-
-    def process_incoming_email(self):
-        email_data = emailSystem.check_inbox()
+    async def process_incoming_email(self):
+        email_data = await emailSystem.check_inbox()
         if email_data:
-            return self.read_and_schedule_interview(email_data)
+            return await self.read_and_schedule_interview(email_data)

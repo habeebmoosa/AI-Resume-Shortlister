@@ -1,8 +1,9 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks
 import os
 from pydantic import BaseModel
 import time
 import pandas as pd
+import asyncio
 
 from src.utils.constants import UPLOAD_DIR
 from src.process_xl.process_user_info import ProcessResume
@@ -64,8 +65,12 @@ async def read_excel(job_data: JobData):
 
     return shortlisted_emails
 
-@app.get("/emailresponder")
-async def email_responder():
+async def email_responder_task():
     while True:
-        emailChainSystem.process_incoming_email()
-        time.sleep(300)
+        await emailChainSystem.process_incoming_email()
+        await asyncio.sleep(30)
+
+@app.get("/start-email-responder")
+async def start_email_responder(background_tasks: BackgroundTasks):
+    background_tasks.add_task(email_responder_task)
+    return {"message": "Email responder started."}
