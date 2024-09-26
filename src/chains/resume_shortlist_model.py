@@ -18,7 +18,7 @@ class ShortlistResume:
 
         shortlist_template = """
         You are a hiring manager. You have received the resumes of some candidates as input. You want to shortlist {shortlist_count} candidates at max based on job description {job_description}.
-        Please go through their resumes and list only their email addresses that should be shortlisted based on the requirements. Do not include any other information, just their emails in JSON format.
+        Please go through their resumes and list only their email addresses (which is the key of the resume data) that should be shortlisted based on the requirements. Do not include any other information, just their emails in JSON format.
         Input: {candidates}
         """
 

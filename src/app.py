@@ -23,10 +23,6 @@ class JobData(BaseModel):
     job_id: int
     filename: str
 
-class InputUser(BaseModel):
-    email: str
-    job_id: int
-
 
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
@@ -67,14 +63,6 @@ async def read_excel(job_data: JobData):
             emailChainSystem.email_sending_agent(name, email, job_data.job_id)
 
     return shortlisted_emails
-
-
-@app.get("/readuser")
-async def read_user(input_user: InputUser):
-    conn = db.create_connection()
-    data = db.read_candidate(conn, input_user.email)
-    db.close_connection(conn)
-    return data
 
 @app.get("/emailresponder")
 async def email_responder():

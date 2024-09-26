@@ -64,11 +64,11 @@ class EmailChainSystem:
             db.store_interview_data(conn, id, name, email, job_id, formatted_date)
 
             print(f"Interview scheduled for {name} on {interview_date}")
+            self.reply_email_with_meeting_link(name, email, job_id)
         else:
             print("Candidate not found in the database.")
 
         db.close_connection(conn)
-        self.reply_email_with_meeting_link(name, email, job_id)
 
         return f"Interview scheduled on {interview_date}"
     
